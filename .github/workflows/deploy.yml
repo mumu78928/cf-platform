@@ -1,0 +1,105 @@
+# cf-platform 自动部署工作流
+# 推送到 main 分支即自动：迁移 D1 → 部署 Worker（无需手动在 Cloudflare 调整）
+#
+# 需在仓库 Settings → Secrets and variables → Actions 配置：
+#
+#   Secrets（敏感信息）：
+#     CLOUDFLARE_API_TOKEN   - Cloudflare API Token（权限：Workers Scripts:Edit, D1:Edit,
+#                              KV Storage:Edit, R2:Edit, Account:Read, Workers AI:Edit,
+#                              如用 DNS 分发还需 Zone:DNS:Edit）
+#     CLOUDFLARE_ACCOUNT_ID  - Cloudflare 账户 ID
+#     D1_DATABASE_ID         - D1 数据库 ID（与 wrangler.toml 中 database_id 占位符替换）
+#     KV_NAMESPACE_ID        - KV 命名空间 ID（与 wrangler.toml 中 id 占位符替换）
+#     JWT_SECRET             - JWT 签名密钥（任意长随机串）
+#     GITHUB_CLIENT_ID       - GitHub OAuth App client id
+#     GITHUB_CLIENT_SECRET   - GitHub OAuth App client secret
+#     CF_API_TOKEN           - （可选）用于子域名 DNS 分发的 API Token（权限：Zone:DNS:Edit）
+#     CF_ZONE_ID             - （可选）主域名 zone id
+#
+#   Variables（非敏感配置，用 vars.XXX 读取）：
+#     BASE_DOMAIN            - 主域名，如 yourdomain.com
+#     PLATFORM_NAME          - 平台名称，如 CF Platform
+#     JWT_ISSUER             - JWT 签发者标识，如 cf-platform
+#     BOOTSTRAP_ADMIN_EMAIL  - 初始管理员邮箱（首次注册该邮箱的用户自动成为管理员）
+#
+# 注意：wrangler.toml 中的 database_id / KV id 占位符会在部署前由脚本用 Secrets 替换。
+
+name: Deploy to Cloudflare
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 避免并发部署冲突
+concurrency:
+  group: deploy-cloudflare
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # 用 Secrets 替换 wrangler.toml 中的占位符（database_id / KV id）
+      - name: Configure wrangler.toml with secrets
+        env:
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
+          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
+        run: |
+          node -e "
+          const fs=require('fs');
+          let t=fs.readFileSync('wrangler.toml','utf8');
+          if(process.env.D1_DATABASE_ID) t=t.replace('REPLACE_WITH_D1_DATABASE_ID',process.env.D1_DATABASE_ID);
+          if(process.env.KV_NAMESPACE_ID) t=t.replace('REPLACE_WITH_KV_NAMESPACE_ID',process.env.KV_NAMESPACE_ID);
+          fs.writeFileSync('wrangler.toml',t);
+          console.log('wrangler.toml configured');
+          "
+
+      # 应用 D1 迁移（远端库）
+      - name: Apply D1 migrations (remote)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 migrations apply cf-platform --remote
+
+      # 部署 Worker，同时写入 Secret 与非敏感 vars
+      # secrets 块：每行一个 GitHub Secret 名称，部署后会成为 Worker 的同名 Secret
+      # vars 块：name: value 形式，部署后会成为 Worker 的同名明文变量（覆盖 wrangler.toml [vars]）
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+          secrets: |
+            JWT_SECRET
+            GITHUB_CLIENT_ID
+            GITHUB_CLIENT_SECRET
+            CF_API_TOKEN
+            CF_ZONE_ID
+          vars: |
+            BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
+            PLATFORM_NAME: ${{ vars.PLATFORM_NAME }}
+            JWT_ISSUER: ${{ vars.JWT_ISSUER }}
+            BOOTSTRAP_ADMIN_EMAIL: ${{ vars.BOOTSTRAP_ADMIN_EMAIL }}
+
+      - name: Summary
+        run: |
+          echo "### Deploy Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- D1 migrations applied" >> $GITHUB_STEP_SUMMARY
+          echo "- Worker cf-platform deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- Secrets & vars updated" >> $GITHUB_STEP_SUMMARY
