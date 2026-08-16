@@ -75,17 +75,12 @@ yumingfenfa/
 - GitHub 账户
 - 一个域名（已托管在 Cloudflare）
 
-### 2. 克隆并初始化
+### 2. 克隆项目
 
 ```bash
 git clone https://github.com/mumu78928/cf-platform.git
 cd cf-platform
-npm install
-npx wrangler login
-node scripts/setup.mjs
 ```
-
-`setup.mjs` 会自动创建 D1 数据库、KV 命名空间、R2 bucket，并将 ID 回填到 `wrangler.toml`。
 
 ### 3. 配置 DNS 通配记录
 
@@ -95,14 +90,7 @@ node scripts/setup.mjs
 |------|------|------|------|
 | A | `*` | `192.0.2.1` | 已代理（橙色云朵） |
 
-### 4. 配置 Worker Routes
-
-在 Cloudflare Dashboard → Workers & Pages → 找到 `yumingfenfa` → 设置 → Triggers → Routes 添加：
-
-- `你的域名.com/*`
-- `*.你的域名.com/*`
-
-### 5. 创建 GitHub OAuth App
+### 4. 创建 GitHub OAuth App
 
 1. 访问 https://github.com/settings/developers → New OAuth App
 2. 填写：
@@ -111,29 +99,30 @@ node scripts/setup.mjs
    - Authorization callback URL: `https://你的域名.com/auth/github/callback`
 3. 创建后复制 **Client ID** 和 **Client Secret**
 
-### 6. 编辑 deploy.yml 填写密钥
+### 5. 编辑 deploy.yml 填写密钥
 
-打开 `.github/workflows/deploy.yml`，将文件顶部所有 `********` 替换为真实值。包括：
+打开 `.github/workflows/deploy.yml`，将文件顶部所有 `********` 替换为真实值：
 
 | 密钥 | 获取方式 |
 |------|---------|
 | `CLOUDFLARE_API_TOKEN` | Cloudflare Dashboard → My Profile → API Tokens，模板选 "Edit Cloudflare Workers" |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Dashboard 右侧边栏 → Account ID |
-| `D1_DATABASE_ID` | Workers & Pages → D1 → 选择数据库 `yumingfenfa` → 复制 ID |
-| `KV_NAMESPACE_ID` | Workers & Pages → KV → 选择命名空间 → 复制 ID |
 | `CF_ZONE_ID` | Cloudflare Dashboard → 你的域名 → 右侧边栏 → Zone ID |
-| `JWT_SECRET` | 任意长随机字符串，可用 `openssl rand -hex 32` 或 `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` 生成 |
+| `JWT_SECRET` | 任意长随机字符串，可用 `openssl rand -hex 32` 生成 |
 | `GITHUB_CLIENT_ID` | 上一步创建的 GitHub OAuth App 页面 |
 | `GITHUB_CLIENT_SECRET` | 上一步创建的 GitHub OAuth App 页面 → Generate a new client secret |
 | `CF_API_TOKEN` | Cloudflare Dashboard → My Profile → API Tokens → Create Custom Token，权限：Zone → DNS → Edit |
 | `BASE_DOMAIN` | 你的主域名，如 `example.com`（不要带 https://） |
 
-### 7. 提交部署
+> D1 数据库、KV 命名空间、R2 存储桶会在部署时**自动创建**，无需手动操作。
+
+### 6. 提交部署
 
 修改完成后提交到 main 分支，GitHub Actions 会自动执行：
-1. D1 数据库迁移（创建表结构）
-2. 部署 Worker
-3. 写入加密变量
+1. 自动创建 D1 数据库、KV 命名空间、R2 存储桶
+2. 应用 D1 数据库迁移（创建表结构）
+3. 部署 Worker
+4. 写入加密变量
 
 ## 使用说明
 
