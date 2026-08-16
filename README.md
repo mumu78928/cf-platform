@@ -1,5 +1,7 @@
 # CF Platform · Cloudflare 全栈 SaaS 平台
 
+重要提示：本项目由 AI 辅助完成
+
 > 基于 Cloudflare Workers 的全栈 SaaS 平台：二级域名分发、管理后台、OAuth/邮箱登录、外接 API、MCP 接入，一键 GitHub Actions 部署。
 
 A full-stack SaaS platform built on Cloudflare Workers: subdomain distribution, admin panel, OAuth/email login, external API, MCP server, and one-click GitHub Actions deployment.
@@ -306,19 +308,5 @@ Compatible with Claude Desktop, Cursor, and any JSON-RPC 2.0 MCP client.
 
 ---
 
-## 📄 License
-
-MIT
-
----
-
-## 🙏 致谢 / Acknowledgments
-
-- [Cloudflare](https://cloudflare.com) — Edge computing platform
-- [Hono](https://hono.dev) — Web framework
-- [Alpine.js](https://alpinejs.dev) — Lightweight JS framework
-- [Tailwind CSS](https://tailwindcss.com) — Utility-first CSS
-
----
 
 <p align="center">Made with ☁️ on Cloudflare Workers</p>
