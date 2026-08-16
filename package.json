@@ -1,0 +1,26 @@
+{
+  "name": "cf-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare-native SaaS platform with subdomain distribution, admin panel, OAuth/email auth, external API and MCP server.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply cf-platform --local",
+    "db:migrate:remote": "wrangler d1 migrations apply cf-platform --remote",
+    "db:create-migration": "wrangler d1 migrations create cf-platform",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.6.14",
+    "bcryptjs": "^2.4.3",
+    "@tsndr/cloudflare-worker-jwt": "^1.0.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250109.0",
+    "@types/bcryptjs": "^2.4.6",
+    "typescript": "^5.7.2",
+    "wrangler": "^3.99.0"
+  }
+}
