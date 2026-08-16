@@ -1,14 +1,25 @@
-# 本地开发密钥（复制为 .dev.vars 后填写）。生产环境用 GitHub Actions 部署时在 deploy.yml 里直接替换。
+# ═══════════════════════════════════════════════════════════════
+#   yumingfenfa（域名分发）本地开发密钥模板
+#   复制此文件为 .dev.vars 后填写真实值
+# ═══════════════════════════════════════════════════════════════
+# 注意：生产环境无需此文件，密钥直接在 deploy.yml 里填写
 
-# JWT 签名密钥（任意长随机串，如 openssl rand -hex 32）
+# ─── JWT 签名密钥（必须） ─────────────────────────────────
+# 任意长随机字符串，用于签名登录 Token
+# 生成方式：openssl rand -hex 32 或 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 JWT_SECRET=change-me-to-a-long-random-string
 
-# GitHub OAuth App（https://github.com/settings/developers 创建）
-# Authorization callback URL 填: https://你的域名.com/auth/github/callback
+# ─── GitHub OAuth 登录（必须，否则无法用 GitHub 登录） ──
+# 获取方式：https://github.com/settings/developers → New OAuth App
+# Authorization callback URL 填：https://你的域名.com/auth/github/callback
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 
-# Cloudflare API（用于子域名分发时自动创建/删除 DNS 记录）
-# Token 需权限: Zone:DNS:Edit（Zone 资源限定到你的主域名 zone）
+# ─── DNS 分发 Token（必须，否则无法自动创建子域名 DNS 记录） ──
+# Cloudflare API Token，权限：Zone:DNS:Edit（Zone 资源限定到你的主域名 zone）
+# 获取方式：Cloudflare Dashboard → My Profile → API Tokens → Create Custom Token
 CF_API_TOKEN=
-CF_ZONE_ID=
+
+# ─── 主域名 Zone ID（必须） ──────────────────────────────
+# 获取方式：Cloudflare Dashboard → 你的域名 → 右侧边栏 → Zone ID
+CF_ZONE_I).randomBytes(32).toString('hex'))\"\nJWT_SECRET=change-me-to-a-long-random-string\n\n# ─── GitHub OAuth 登录（必须，否则无法用 GitHub 登录） ──\n# 获取方式：https://github.com/settings/developers → New OAuth App\n# Authorization callback URL 填：https://你的域名.com/auth/github/callback\nGITHUB_CLIENT_ID=\nGITHUB_CLIENT_SECRET=\n\n# ─── DNS 分发 Token（必须，否则无法自动创建子域名 DNS 记录） ──\n# Cloudflare API Token，权限：Zone:DNS:Edit（Zone 资源限定到你的主域名 zone）\n# 获取方式：Cloudflare Dashboard → My Profile → API Tokens → Create Custom Token\nCF_API_TOKEN=\n\n# ─── 主域名 Zone ID（必须） ──────────────────────────────\n# 获取方式：Cloudflare Dashboard → 你的域名 → 右侧边栏 → Zone ID\nCF_ZONE_ID="}]

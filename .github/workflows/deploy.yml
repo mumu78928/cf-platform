@@ -1,28 +1,15 @@
-# cf-platform 自动部署工作流
-# 推送到 main 分支即自动：迁移 D1 → 部署 Worker（无需手动在 Cloudflare 调整）
+# ═══════════════════════════════════════════════════════════════
+#   yumingfenfa（域名分发）自动部署工作流
+#   推送到 main 分支即自动部署到 Cloudflare
+# ═══════════════════════════════════════════════════════════════
 #
-# 需在仓库 Settings → Secrets and variables → Actions 配置：
+# 使用方式：
+#   1. 在 GitHub 网页上打开此文件，点 ✏️ 编辑
+#   2. 把下面所有 ******** 替换成你的真实密钥
+#   3. 提交到 main 分支，自动触发部署
+#   4. 后续正常推送代码即可自动部署
 #
-#   Secrets（敏感信息）：
-#     CLOUDFLARE_API_TOKEN   - Cloudflare API Token（权限：Workers Scripts:Edit, D1:Edit,
-#                              KV Storage:Edit, R2:Edit, Account:Read, Workers AI:Edit,
-#                              如用 DNS 分发还需 Zone:DNS:Edit）
-#     CLOUDFLARE_ACCOUNT_ID  - Cloudflare 账户 ID
-#     D1_DATABASE_ID         - D1 数据库 ID（与 wrangler.toml 中 database_id 占位符替换）
-#     KV_NAMESPACE_ID        - KV 命名空间 ID（与 wrangler.toml 中 id 占位符替换）
-#     JWT_SECRET             - JWT 签名密钥（任意长随机串）
-#     GITHUB_CLIENT_ID       - GitHub OAuth App client id
-#     GITHUB_CLIENT_SECRET   - GitHub OAuth App client secret
-#     CF_API_TOKEN           - （可选）用于子域名 DNS 分发的 API Token（权限：Zone:DNS:Edit）
-#     CF_ZONE_ID             - （可选）主域名 zone id
-#
-#   Variables（非敏感配置，用 vars.XXX 读取）：
-#     BASE_DOMAIN            - 主域名，如 yourdomain.com
-#     PLATFORM_NAME          - 平台名称，如 CF Platform
-#     JWT_ISSUER             - JWT 签发者标识，如 cf-platform
-#     BOOTSTRAP_ADMIN_EMAIL  - 初始管理员邮箱（首次注册该邮箱的用户自动成为管理员）
-#
-# 注意：wrangler.toml 中的 database_id / KV id 占位符会在部署前由脚本用 Secrets 替换。
+# 注意：不要在任何地方公开这些密钥！
 
 name: Deploy to Cloudflare
 
@@ -31,7 +18,116 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# 避免并发部署冲突
+# ═══════════════════════════════════════════════════════════════
+#  密钥填写区域 — 把 ******** 替换为实际值
+# ═══════════════════════════════════════════════════════════════
+env:
+  # ─── 1. Cloudflare 凭据（必须） ─────────────────────────────
+  # 这些是部署 Worker 到 Cloudflare 必需的凭证
+
+  CLOUDFLARE_API_TOKEN: ********
+  # 说明：Cloudflare API 令牌，用于部署 Worker、管理 D1/KV/R2 等资源
+  # 获取步骤：
+  #   1. 登录 Cloudflare Dashboard → https://dash.cloudflare.com
+  #   2. 右上角头像 → My Profile → API Tokens → Create Token
+  #   3. 模板选 "Edit Cloudflare Workers"
+  #   4. Permissions 确认包含：
+  #      - Workers Scripts: Edit
+  #      - D1: Edit
+  #      - KV: Edit
+  #      - R2: Edit
+  #      - AI: Edit
+  #   5. Account Resources 选你的账户 → Continue to summary → Create Token
+  #   6. 复制生成的 Token（只会显示一次，务必保存）
+
+  CLOUDFLARE_ACCOUNT_ID: ********
+  # 说明：Cloudflare 账户的唯一标识 ID
+  # 获取方式：Cloudflare Dashboard → 右侧边栏 → Account ID（一串字符，如 abc123def456...）
+
+  D1_DATABASE_ID: ********
+  # 说明：D1 数据库的 ID（部署时自动注入 wrangler.toml）
+  # 获取方式：Cloudflare Dashboard → Workers & Pages → D1 → 选择数据库 "yumingfenfa" → 复制 ID
+  # 注意：先运行 scripts/setup.mjs 创建数据库，或手动在 Cloudflare 创建 D1 数据库
+
+  KV_NAMESPACE_ID: ********
+  # 说明：KV 命名空间的 ID（部署时自动注入 wrangler.toml）
+  # 获取方式：Cloudflare Dashboard → Workers & Pages → KV → 选择命名空间 → 复制 ID
+  # 注意：先运行 scripts/setup.mjs 创建 KV 命名空间，或手动创建
+
+  CF_ZONE_ID: ********
+  # 说明：你的主域名的 Zone ID，用于子域名 DNS 分发
+  # 获取方式：Cloudflare Dashboard → 点击你的域名 → 右侧边栏 → Zone ID
+
+  # ─── 2. JWT 签名密钥（必须） ───────────────────────────────
+  # 用于签发登录 Token，保证用户会话安全
+
+  JWT_SECRET: ********
+  # 说明：任意长随机字符串，用于签名 JWT Token
+  # 生成方式（任选其一）：
+  #   - 命令行运行：openssl rand -hex 32
+  #   - 命令行运行：node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  #   - 随便打一串 32 位以上的字符，如 "my-super-secret-key-change-this-123456"
+
+  # ─── 3. GitHub OAuth 登录（必须配置，否则无法用 GitHub 登录） ──
+  # 用于用户通过 GitHub 账号登录本系统
+
+  GITHUB_CLIENT_ID: ********
+  # 说明：GitHub OAuth App 的 Client ID
+  # 获取步骤：
+  #   1. 访问 https://github.com/settings/developers
+  #   2. 点 "New OAuth App"
+  #   3. 填写：
+  #      - Application name: 域名分发（或任意名称）
+  #      - Homepage URL: https://你的域名.com
+  #      - Authorization callback URL: https://你的域名.com/auth/github/callback
+  #   4. 点 "Register application"
+  #   5. 复制页面上的 "Client ID"
+
+  GITHUB_CLIENT_SECRET: ********
+  # 说明：GitHub OAuth App 的 Client Secret（保密密钥）
+  # 获取步骤：
+  #   1. 在上一步创建的 OAuth App 页面
+  #   2. 点 "Generate a new client secret"
+  #   3. 复制生成的 Secret（只会显示一次，务必保存）
+  # 注意：此值与 Client ID 配对使用，用户通过 GitHub 登录时验证身份
+
+  # ─── 4. DNS 分发 Token（必须配置，否则无法自动创建子域名 DNS 记录） ──
+  # 用于用户注册后自动创建 username.yourdomain.com 的 DNS 记录
+
+  CF_API_TOKEN: ********
+  # 说明：Cloudflare API 令牌，用于自动创建/删除子域名的 DNS 记录
+  # 获取步骤：
+  #   1. Cloudflare Dashboard → My Profile → API Tokens → Create Token
+  #   2. 选 "Create Custom Token"
+  #   3. 设置：
+  #      - Token name: yumingfenfa-dns（或任意名称）
+  #      - Permissions: Zone → DNS → Edit
+  #      - Zone Resources: 选你的域名（如 example.com）
+  #   4. Continue to summary → Create Token
+  #   5. 复制生成的 Token
+  # 注意：此 Token 与 CLOUDFLARE_API_TOKEN 不同，它只需要 DNS:Edit 权限
+
+  # ─── 5. 域名配置（必须） ───────────────────────────────────
+  # 系统运行的基础域名配置
+
+  BASE_DOMAIN: ********
+  # 说明：你的主域名，如 example.com
+  # 注意：不要带 https:// 和末尾的斜杠，只写域名本身
+  # 正确：example.com
+  # 错误：https://example.com/、example.com/
+
+  PLATFORM_NAME: 域名分发
+  # 说明：平台名称，显示在网站标题、页脚等位置
+  # 默认值：域名分发（保持默认即可，也可改为其他名称）
+
+  JWT_ISSUER: yumingfenfa
+  # 说明：JWT Token 的签发者标识
+  # 默认值：yumingfenfa（保持默认即可）
+
+# ═══════════════════════════════════════════════════════════════
+#  以下为部署逻辑，无需修改
+# ═══════════════════════════════════════════════════════════════
+
 concurrency:
   group: deploy-cloudflare
   cancel-in-progress: false
@@ -53,53 +149,53 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      # 用 Secrets 替换 wrangler.toml 中的占位符（database_id / KV id）
-      - name: Configure wrangler.toml with secrets
-        env:
-          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
-          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID }}
+      # 用环境变量替换 wrangler.toml 中的占位符
+      - name: Configure wrangler.toml
         run: |
           node -e "
           const fs=require('fs');
           let t=fs.readFileSync('wrangler.toml','utf8');
-          if(process.env.D1_DATABASE_ID) t=t.replace('REPLACE_WITH_D1_DATABASE_ID',process.env.D1_DATABASE_ID);
-          if(process.env.KV_NAMESPACE_ID) t=t.replace('REPLACE_WITH_KV_NAMESPACE_ID',process.env.KV_NAMESPACE_ID);
+          t=t.replace('REPLACE_WITH_D1_DATABASE_ID',process.env.D1_DATABASE_ID);
+          t=t.replace('REPLACE_WITH_KV_NAMESPACE_ID',process.env.KV_NAMESPACE_ID);
+          t=t.replace(/yourdomain\.com/g, process.env.BASE_DOMAIN);
           fs.writeFileSync('wrangler.toml',t);
           console.log('wrangler.toml configured');
           "
 
-      # 应用 D1 迁移（远端库）
-      - name: Apply D1 migrations (remote)
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 migrations apply cf-platform --remote
+      # 应用 D1 数据库迁移（创建表结构）
+      - name: Apply D1 migrations
+        run: npx wrangler d1 migrations apply yumingfenfa --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
 
-      # 部署 Worker，同时写入 Secret 与非敏感 vars
-      # secrets 块：每行一个 GitHub Secret 名称，部署后会成为 Worker 的同名 Secret
-      # vars 块：name: value 形式，部署后会成为 Worker 的同名明文变量（覆盖 wrangler.toml [vars]）
+      # 部署 Worker 到 Cloudflare
       - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
-          secrets: |
-            JWT_SECRET
-            GITHUB_CLIENT_ID
-            GITHUB_CLIENT_SECRET
-            CF_API_TOKEN
-            CF_ZONE_ID
-          vars: |
-            BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
-            PLATFORM_NAME: ${{ vars.PLATFORM_NAME }}
-            JWT_ISSUER: ${{ vars.JWT_ISSUER }}
-            BOOTSTRAP_ADMIN_EMAIL: ${{ vars.BOOTSTRAP_ADMIN_EMAIL }}
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+
+      # 将敏感密钥写入 Worker 的加密环境变量（Secrets）
+      - name: Set Worker secrets
+        run: |
+          echo "$JWT_SECRET" | npx wrangler secret put JWT_SECRET
+          echo "$GITHUB_CLIENT_ID" | npx wrangler secret put GITHUB_CLIENT_ID
+          echo "$GITHUB_CLIENT_SECRET" | npx wrangler secret put GITHUB_CLIENT_SECRET
+          echo "$CF_API_TOKEN" | npx wrangler secret put CF_API_TOKEN
+          echo "$CF_ZONE_ID" | npx wrangler secret put CF_ZONE_ID
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ env.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
+          JWT_SECRET: ${{ env.JWT_SECRET }}
+          GITHUB_CLIENT_ID: ${{ env.GITHUB_CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ env.GITHUB_CLIENT_SECRET }}
+          CF_API_TOKEN: ${{ env.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ env.CF_ZONE_ID }}
 
       - name: Summary
         run: |
           echo "### Deploy Summary" >> $GITHUB_STEP_SUMMARY
           echo "- D1 migrations applied" >> $GITHUB_STEP_SUMMARY
-          echo "- Worker cf-platform deployed" >> $GITHUB_STEP_SUMMARY
-          echo "- Secrets & vars updated" >> $GITHUB_STEP_SUMMARY
+          echo "- Worker yumingfenfa deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- Secrets written to Worker" >> $GITHUB_STEP_SUMMARY
