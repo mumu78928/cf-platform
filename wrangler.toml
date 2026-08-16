@@ -1,0 +1,59 @@
+name = "cf-platform"
+main = "src/index.tsx"
+compatibility_date = "2025-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+# ─── Routes ──────────────────────────────────────────────────────────────
+# 主域名 + 通配子域名。部署前请将 BASE_DOMAIN 改为你的域名，并在 Cloudflare DNS
+# 里加一条通配记录：  *.yourdomain.com   (proxied, 指向任意占位 IP 如 192.0.2.1)
+# 然后在 Cloudflare Dashboard 中给该 Worker 添加 routes：
+#   yourdomain.com/*
+#   *.yourdomain.com/*
+# 也可改成 custom_domain 形式（不支持通配），按需选择。
+routes = [
+  { pattern = "yourdomain.com/*", zone_name = "yourdomain.com" },
+  { pattern = "*.yourdomain.com/*", zone_name = "yourdomain.com" }
+]
+
+# ─── D1 (关系型数据库) ──────────────────────────────────────────────────
+[[d1_databases]]
+binding = "DB"
+database_name = "cf-platform"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# ─── KV (会话 / 缓存 / 限流) ─────────────────────────────────────────────
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# ─── R2 (对象存储：头像 / 上传) ──────────────────────────────────────────
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "cf-platform-assets"
+
+# ─── Workers AI ──────────────────────────────────────────────────────────
+[ai]
+binding = "AI"
+
+# ─── 非敏感变量（敏感项放 Secret / .dev.vars）──────────────────────────
+[vars]
+BASE_DOMAIN = "yourdomain.com"
+PLATFORM_NAME = "CF Platform"
+JWT_ISSUER = "cf-platform"
+# 初始管理员邮箱（首次注册该邮箱的用户自动成为管理员）
+BOOTSTRAP_ADMIN_EMAIL = "admin@yourdomain.com"
+
+# ───────────────────────────────────────────────────────────────────────
+# Secret（用 `wrangler secret put <NAME>` 或 GitHub Actions 配置，勿写这里）：
+#   JWT_SECRET          - JWT 签名密钥
+#   GITHUB_CLIENT_ID    - GitHub OAuth App client id
+#   GITHUB_CLIENT_SECRET- GitHub OAuth App client secret
+#   CF_API_TOKEN        - 用于 DNS 记录管理（子域名分发）的 Cloudflare API Token
+#   CF_ZONE_ID          - 主域名所在 zone id
+# ───────────────────────────────────────────────────────────────────────
+
+# 静态资源（管理后台 CSS 等）
+[assets]
+directory = "./public"
+binding = "ASSETS"
